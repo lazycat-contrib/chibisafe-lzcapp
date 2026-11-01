@@ -1,0 +1,18 @@
+package: community.lazycat.app.chibisafe
+name: Chibisafe
+version: 0.0.0
+description: "Self-hosted file hosting with albums, tags and a clean uploader."
+min_os_version: "1.5.0"
+homepage: https://github.com/chibisafe/chibisafe
+author: chibisafe
+license: MIT
+permissions:
+  required:
+    - net.internet
+locales:
+  zh:
+    name: Chibisafe
+    description: "自建文件托管与分享：拖拽上传、相册整理、标签检索，适合当私人图床和文件中转站。"
+  en:
+    name: Chibisafe
+    description: "Self-hosted file hosting with albums, tags and a clean uploader."

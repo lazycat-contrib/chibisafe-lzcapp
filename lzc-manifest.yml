@@ -1,0 +1,53 @@
+application:
+  subdomain: chibisafe
+  multi_instance: false
+  upstreams:
+    - location: /package-licenses/
+      backend: file:///lzcapp/pkg/content/licenses/
+    # backend API — same origin as the web app so the SPA can call it directly
+    - location: /api
+      backend: http://chibisafe-server:8000
+    - location: /
+      backend: http://chibisafe-web:8001/
+
+services:
+  chibisafe-server:
+    # upstream: chibisafe/chibisafe-server
+    image: docker.1ms.run/chibisafe/chibisafe-server:v6.7.0
+    environment:
+      - |-
+        ADMIN_PASSWORD={{ .U.admin_password }}
+      - BASE_API_URL=http://chibisafe-server:8000
+      - SERVER_PORT=8000
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/database:/app/database
+      - /lzcapp/var/uploads:/app/uploads
+      - /lzcapp/var/logs:/app/logs
+
+  chibisafe-web:
+    # upstream: chibisafe/chibisafe
+    image: docker.1ms.run/chibisafe/chibisafe:v6.7.0
+    depends_on:
+      - chibisafe-server
+    environment:
+      - BASE_API_URL=http://chibisafe-server:8000
+      - TZ=Asia/Shanghai
+
+usage: |
+  Chibisafe 是自建的文件托管服务：拖拽上传、相册整理、标签检索，适合当私人图床或文件中转站。
+
+  使用方法：
+  1. 打开应用，用用户名 admin 和你在安装时设置的管理员密码登录。
+  2. 直接拖拽文件上传，可以建相册归类，也可以给文件打标签。
+  3. 在管理后台可以创建邀请码，让其他人注册上传。
+
+  数据与安全：
+  - 上传的文件、数据库和日志都保存在 /lzcapp/var 下（uploads / database / logs），卸载应用会一并删除，请定期备份。
+  - 管理员密码由你在安装时填写，默认值是随机生成的，不存在内置弱口令。用户名固定为 admin。
+  - 该密码只在首次启动、库里还没有 owner 账号时生效；之后改密码请在应用内修改。
+
+  说明：
+  - 本应用包含两个容器（后端服务 + 前端界面），启动顺序由依赖关系保证。
+  - 前端通过同源的 /api 路径访问后端，没有额外的反向代理容器。
+  - 未做真机验证：登录、上传、相册、邀请码以及重启后持久化均未在设备上实测。
