@@ -9,10 +9,9 @@ application:
       backend: http://chibisafe-server:8000
     - location: /
       backend: http://chibisafe-web:8001/
-
 services:
   chibisafe-server:
-    # upstream: chibisafe/chibisafe-server
+    # upstream: chibisafe/chibisafe-server:v6.7.0
     image: docker.1ms.run/chibisafe/chibisafe-server:v6.7.0
     environment:
       - |-
@@ -24,16 +23,14 @@ services:
       - /lzcapp/var/database:/app/database
       - /lzcapp/var/uploads:/app/uploads
       - /lzcapp/var/logs:/app/logs
-
   chibisafe-web:
-    # upstream: chibisafe/chibisafe
+    # upstream: chibisafe/chibisafe:v6.7.0
     image: docker.1ms.run/chibisafe/chibisafe:v6.7.0
     depends_on:
       - chibisafe-server
     environment:
       - BASE_API_URL=http://chibisafe-server:8000
       - TZ=Asia/Shanghai
-
 usage: |
   Chibisafe 是自建的文件托管服务：拖拽上传、相册整理、标签检索，适合当私人图床或文件中转站。
 

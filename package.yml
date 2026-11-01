@@ -1,6 +1,6 @@
 package: community.lazycat.app.chibisafe
 name: Chibisafe
-version: 0.0.0
+version: 6.7.0
 description: "Self-hosted file hosting with albums, tags and a clean uploader."
 min_os_version: "1.5.0"
 homepage: https://github.com/chibisafe/chibisafe
