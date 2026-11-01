@@ -1,0 +1,116 @@
+name: Verify Chibisafe Release on GitHub
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify
+        required: false
+        default: v6.7.0
+permissions:
+  contents: read
+concurrency:
+  group: chibisafe-release-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="$(gh release view --json tagName --jq .tagName)"; fi
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Download exact Release asset on runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ASSET_NAME="community.lazycat.app.chibisafe-${RELEASE_TAG}.lpk"
+          echo "ASSET_NAME=$ASSET_NAME" >> "$GITHUB_ENV"
+          gh release view "$RELEASE_TAG" --json tagName,assets > release-metadata.json
+          gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir verify-pkg
+
+      - name: Verify package contents
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, tarfile, yaml
+
+          tag = os.environ['RELEASE_TAG']
+          name = os.environ['ASSET_NAME']
+          pkg = __import__('pathlib').Path('verify-pkg') / name
+          assert pkg.is_file(), pkg
+
+          h = hashlib.sha256()
+          with pkg.open('rb') as fh:
+              for chunk in iter(lambda: fh.read(1 << 20), b''):
+                  h.update(chunk)
+
+          with tarfile.open(pkg, 'r:') as package:
+              members = package.getnames()
+              for required in ('manifest.yml', 'package.yml', 'content.tar', 'icon.png'):
+                  assert required in members, (required, members)
+
+              info = yaml.safe_load(package.extractfile('package.yml').read())
+              assert info['package'] == 'community.lazycat.app.chibisafe', info['package']
+              assert info['name'] == 'Chibisafe', info['name']
+              assert info['version'] == tag.lstrip('v'), (info['version'], tag)
+              assert info['license'] == 'MIT', info['license']
+
+              m = yaml.safe_load(package.extractfile('manifest.yml').read())
+              app = m['application']
+              assert app['subdomain'] == 'chibisafe', app['subdomain']
+              ups = app['upstreams']
+              assert any(u['location'] == '/' and u['backend'] == 'http://chibisafe-web:8001/' for u in ups), ups
+              assert any(u['location'] == '/api' and u['backend'] == 'http://chibisafe-server:8000' for u in ups), ups
+
+              svcs = m['services']
+              assert set(svcs) == {'chibisafe-server', 'chibisafe-web'}, set(svcs)
+
+              server = svcs['chibisafe-server']
+              web = svcs['chibisafe-web']
+              assert 'chibisafe/chibisafe-server:' + tag.lstrip('v') in server['image'], server['image']
+              assert 'chibisafe/chibisafe:' + tag.lstrip('v') in web['image'], web['image']
+
+              # admin password must come from a deploy param, never a literal default
+              senv = ' '.join(server['environment'])
+              assert 'ADMIN_PASSWORD=' in senv, senv
+              assert '.U.admin_password' in senv, senv
+              assert 'ADMIN_PASSWORD=admin' not in senv, senv
+
+              # persistent data must be under /lzcapp/var
+              binds = ' '.join(server['binds'])
+              for part in ('/lzcapp/var/database', '/lzcapp/var/uploads', '/lzcapp/var/logs'):
+                  assert part in binds, binds
+
+              # no startup gate / file interceptor added
+              text = package.extractfile('manifest.yml').read().decode()
+              assert 'lzc-file-chooser' not in text
+
+              params = yaml.safe_load(package.extractfile('deploy_params.yml').read())
+              by_id = {p['id']: p for p in params['params']}
+              assert set(by_id) == {'admin_password'}, set(by_id)
+              assert by_id['admin_password']['type'] == 'secret'
+              assert by_id['admin_password']['optional'] is False
+
+              with tarfile.open(fileobj=package.extractfile('content.tar')) as content:
+                  cmembers = content.getnames()
+                  lic = [n for n in cmembers if 'licenses/' in n]
+                  assert lic, cmembers
+                  license_text = content.extractfile(lic[0]).read().decode()
+              assert 'MIT License' in license_text
+
+          result = {
+              'verified': True,
+              'tag': tag,
+              'sha256': h.hexdigest(),
+              'size': pkg.stat().st_size,
+              'runtime_tested': False,
+          }
+          print(json.dumps(result))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
+          PY
