@@ -72,8 +72,10 @@ jobs:
 
               server = svcs['chibisafe-server']
               web = svcs['chibisafe-web']
-              assert 'chibisafe/chibisafe-server:' + tag.lstrip('v') in server['image'], server['image']
-              assert 'chibisafe/chibisafe:' + tag.lstrip('v') in web['image'], web['image']
+              assert 'chibisafe/chibisafe-server' in server['image'], server['image']
+              assert server['image'].endswith(':' + tag.lstrip('v')), server['image']
+              assert 'chibisafe/chibisafe' in web['image'], web['image']
+              assert web['image'].endswith(':' + tag.lstrip('v')), web['image']
 
               # admin password must come from a deploy param, never a literal default
               senv = ' '.join(server['environment'])
